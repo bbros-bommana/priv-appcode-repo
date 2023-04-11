@@ -3,7 +3,7 @@ name: Push Image to ECR
 on:
   push:
     branches:
-      - master
+      - main
 
 env:
   AWS_REGION: us-east-2
