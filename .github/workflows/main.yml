@@ -1,0 +1,66 @@
+name: Push Image to ECR
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  AWS_REGION: us-east-2
+  ECR_IMAGE_NAME: gitops-skm-demo
+  ECR_IMAGE_TAG: ${{ github.sha }}
+  ECR_Registry: 356791834110.dkr.ecr.us-east-2.amazonaws.com
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        ref: 'main'
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build and push
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: true
+        tags: ${{ env.ECR_Registry }}/${{ env.ECR_IMAGE_NAME }}:${{ github.sha }}
+    - name: Image digest
+      run: echo ${{ steps.docker_build.outputs.digest }}
+    
+  update-manifest-stage:
+    runs-on: ubuntu-latest
+    needs: ['deploy']
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: bbros-bommana/priv-k8s-repo
+          ref: 'main'
+          token: ${{ secrets.PRIVREPO_GITHUB_TOKEN }}
+      - name: setup git config
+        run: |
+          git config --global user.name "krrish1110"
+          git config --global user.email "krrish.kj1110@gmail.com"
+          echo ${{ github.sha }}
+          cat deployment.yml
+          sed -i "s#${{ env.ECR_Registry }}.*#${{ env.ECR_Registry }}/gitops-skm-demo:${{ github.sha }}#g" deployment.yml
+          cat deployment.yml
+          git add -A
+          git commit -am "Update image for - ${{ github.sha }}"
+      - run: echo ${{ github }}
+      - run: git push origin master
